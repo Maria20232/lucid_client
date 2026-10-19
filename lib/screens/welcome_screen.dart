@@ -18,17 +18,32 @@ class WelcomeScreen extends StatefulWidget {
   State<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
-class _WelcomeScreenState extends State<WelcomeScreen> {
+class _WelcomeScreenState extends State<WelcomeScreen>
+    with WidgetsBindingObserver {
   String? _healthUrl;
   Future<BackendHealth>? _health;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (widget.recoverLostImages &&
         !kIsWeb &&
         defaultTargetPlatform == TargetPlatform.android) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _recoverPhoto());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshHealth();
     }
   }
 
@@ -40,11 +55,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       }
       final files = response.files;
       if (files != null && files.isNotEmpty) {
-        await Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => ScanScreen(recoveredFile: files.first),
-          ),
-        );
+        await _open(ScanScreen(recoveredFile: files.first));
       } else if (response.exception != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -69,9 +80,22 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     }
   }
 
-  void _open(Widget screen) =>
-      Navigator.of(context)
-          .push(MaterialPageRoute<void>(builder: (_) => screen));
+  void _refreshHealth() {
+    if (!mounted) {
+      return;
+    }
+    final app = AppScope.of(context);
+    setState(() {
+      _healthUrl = app.baseUrl;
+      _health = app.api.healthCheck();
+    });
+  }
+
+  Future<void> _open(Widget screen) async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => screen));
+    _refreshHealth();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -140,8 +164,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             if (snapshot.connectionState != ConnectionState.done) {
               message = 'Checking the backend…';
             } else if (snapshot.hasError) {
-              message =
-                  'Backend is not reachable. Check the server URL in Settings.';
+              final error = snapshot.error;
+              final detail = error is ApiException
+                  ? error.message
+                  : 'The health response could not be read. Open /health to check the server response.';
+              message = 'Backend check failed.\n$detail';
             } else if (health?.ocrReady == true) {
               message =
                   'Backend connected · ${health!.kbSize} knowledge records · OCR ready';
@@ -156,12 +183,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   warning:
                       snapshot.hasError || (health != null && !health.ocrReady),
                 ),
+                SelectableText(
+                  'Server: ${app.baseUrl}',
+                  style: const TextStyle(color: AppColors.textMuted),
+                ),
                 TextButton(
                   onPressed: snapshot.connectionState == ConnectionState.waiting
                       ? null
-                      : () {
-                          setState(() => _health = app.api.healthCheck());
-                        },
+                      : _refreshHealth,
                   child: const Text('Check connection again'),
                 ),
               ],

@@ -11,6 +11,83 @@ import 'helpers.dart';
 
 void main() {
   testWidgets(
+    'health status refreshes on returning home, resuming, and retrying',
+    (tester) async {
+      var healthy = false;
+      var healthCalls = 0;
+      final mock = MockClient((request) async {
+        expect(request.method, 'GET');
+        expect(request.url.path, '/health');
+        healthCalls++;
+        return healthy
+            ? jsonResponse({
+                'status': 'ok',
+                'service': 'lucid-backend',
+                'version': '0.3.0',
+                'kb_size': 5726,
+                'ocr': {
+                  'ready': true,
+                  'languages': ['eng', 'osd'],
+                  'configured_language': 'eng',
+                  'missing_languages': [],
+                },
+              })
+            : jsonResponse({
+                'detail': 'Health check temporarily unavailable',
+              }, 503);
+      });
+      final controller = AppController(
+        store: MemoryStore(),
+        apiFactory: (url) => ApiService(baseUrl: url, client: mock),
+      );
+      addTearDown(mock.close);
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        LucidApp(controller: controller, recoverLostImages: false),
+      );
+      await tester.pumpAndSettle();
+
+      final failed = find.textContaining(
+        'Health check temporarily unavailable',
+      );
+      final connected = find.text(
+        'Backend connected · 5726 knowledge records · OCR ready',
+      );
+      await _reveal(tester, failed);
+      expect(failed, findsOneWidget);
+      expect(find.text('Server: ${controller.baseUrl}'), findsOneWidget);
+      expect(healthCalls, 1);
+
+      await _reveal(tester, find.text('Enter ingredients'), delta: -240);
+      await tester.tap(find.text('Enter ingredients'));
+      await tester.pumpAndSettle();
+      healthy = true;
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await _reveal(tester, connected);
+      expect(connected, findsOneWidget);
+      expect(healthCalls, 2);
+
+      healthy = false;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      await _reveal(tester, failed);
+      expect(failed, findsOneWidget);
+      expect(healthCalls, 3);
+
+      healthy = true;
+      await _reveal(tester, find.text('Check connection again'));
+      await tester.tap(find.text('Check connection again'));
+      await tester.pumpAndSettle();
+      await _reveal(tester, connected, delta: -240);
+      expect(connected, findsOneWidget);
+      expect(healthCalls, 4);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'manual flow requires a check and explicit review before results',
     (tester) async {
       final mock = MockClient(
