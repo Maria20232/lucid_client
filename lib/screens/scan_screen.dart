@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import 'results_screen.dart';
 
@@ -11,34 +13,44 @@ class ScanScreen extends StatefulWidget {
 
 class _ScanScreenState extends State<ScanScreen> {
   bool _isProcessing = false;
+  String? _errorMessage;
 
   Future<void> _takePhoto() async {
-    setState(() => _isProcessing = true);
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
 
-    // Fake processing delay — replace with real OCR call later
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final placeholderBytes = Uint8List.fromList(List<int>.filled(1024, 0));
+      final ingredients = await ApiService.scanImage(placeholderBytes);
 
-    if (!mounted) return;
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
 
-    setState(() => _isProcessing = false);
-
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ResultsScreen()),
-    );
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ResultsScreen(ingredients: ingredients),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isProcessing = false;
+        _errorMessage = 'Could not reach the server.\n$e';
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scan a Label'),
-      ),
+      appBar: AppBar(title: const Text('Scan a Label')),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              // Camera placeholder
               Expanded(
                 child: Container(
                   width: double.infinity,
@@ -88,6 +100,14 @@ class _ScanScreenState extends State<ScanScreen> {
                   ),
                 ),
               ),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.danger, fontSize: 14),
+                ),
+              ],
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: _isProcessing ? null : _takePhoto,
