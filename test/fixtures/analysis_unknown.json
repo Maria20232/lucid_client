@@ -1,0 +1,25 @@
+{
+  "raw_text": "Ingredients: sugra",
+  "ingredient_text": "sugra",
+  "ingredients": [],
+  "matches": [],
+  "unmatched": [
+    {
+      "text": "sugra",
+      "reason": "no_exact_match",
+      "suggestions": [
+        {
+          "ingredient_id": "sugar",
+          "name": "sugar",
+          "similarity": 80.0
+        }
+      ]
+    }
+  ],
+  "needs_review": true,
+  "warnings": [
+    "No unambiguous ingredients were recognized. Check or correct the extracted text."
+  ],
+  "knowledge_version": "kb-sha256-d096dcbd2bab40ac",
+  "matcher_version": "conservative-list-v1"
+}
